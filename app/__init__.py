@@ -1,40 +1,30 @@
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
 from flask_cors import CORS
-import os
-
-db = SQLAlchemy()
-migrate = Migrate()
-
+from flask_jwt_extended import JWTManager
+from .config import Config
+from .database import db
+from .auth_routes import auth_bp
 
 def create_app():
     app = Flask(__name__)
+    app.config.from_object(Config)
 
-    # Config from env
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
-        "DATABASE_URL",
-        "postgresql://marketadmin:Market123@market-db:5432/marketdb",
-    )
-    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    # Initialize extensions
+    db.init_app(app)
+    JWTManager(app)
 
-    # CORS: allow your new domain
+    # CORS – allow your NextJS origin
     CORS(
         app,
-        origins=[
-            "https://market-airnav-compound.work.gd",
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
-        ],
+        resources={r"/api/*": {"origins": "*"}},  # in prod, restrict this to your domain
         supports_credentials=True,
     )
 
-    db.init_app(app)
-    migrate.init_app(app, db)
+    # Blueprints
+    app.register_blueprint(auth_bp, url_prefix="/api/auth")
 
-    from . import models  # noqa: F401
-
-    from .routes import main_bp
-    app.register_blueprint(main_bp)
+    # Create tables (for now, simple create_all; later use Alembic)
+    with app.app_context():
+        db.create_all()
 
     return app

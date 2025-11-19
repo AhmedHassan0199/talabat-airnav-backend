@@ -1,0 +1,41 @@
+name: Deploy Market Backend to Vultr
+
+on:
+  push:
+    branches:
+      - master    # غيّرها لو اسم الفرع حاجة تانية
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (optional)
+        uses: actions/checkout@v4
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Deploy market backend on Vultr
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+          set -e
+
+          echo ">>> Switching to app directory..."
+          cd /apps/airnav-compound-app/market-backend
+
+          echo ">>> Pulling latest backend code..."
+          git fetch --all
+          git reset --hard origin/master
+
+          echo ">>> Building backend Docker image..."
+          cd /apps/airnav-compound-app
+          docker compose build market-backend
+
+          echo ">>> Restarting backend service..."
+          docker compose up -d market-backend
+
+          echo ">>> Backend deployment complete ✅"
+          EOF

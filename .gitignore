@@ -1,0 +1,21 @@
+# venv
+.venv/
+env/
+venv/
+
+# python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# env
+.env
+
+# migrations cache (keep migration scripts but ignore pyc)
+migrations/**/__pycache__/
+
+# OS
+.DS_Store
+Thumbs.db
+
+airnavcompound-1c9e45a9528c.json

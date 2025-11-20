@@ -5,6 +5,7 @@ from flask_migrate import Migrate
 from flask_cors import CORS
 from .config import Config
 
+
 db = SQLAlchemy()
 migrate = Migrate()
 
@@ -36,9 +37,11 @@ def create_app():
     # Blueprints
     from .routes import main_bp
     from .auth.routes import auth_bp
+    from .stores.routes import stores_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
+    app.register_blueprint(stores_bp, url_prefix="/api/stores")
 
     # بعدين هنزود:
     # from .seller_routes import seller_bp

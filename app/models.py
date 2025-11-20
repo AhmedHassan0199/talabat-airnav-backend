@@ -57,27 +57,30 @@ class Store(db.Model):
         return f"<Store {self.name} (owner={self.owner_id})>"
 
 
-# -------- Product ---------
 class Product(db.Model):
     __tablename__ = "products"
 
     id = db.Column(db.Integer, primary_key=True)
     store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=False)
 
-    name = db.Column(db.String(120), nullable=False)
-    description = db.Column(db.Text, nullable=True)
+    name = db.Column(db.String(150), nullable=False)
+    description = db.Column(db.Text)
     price = db.Column(db.Numeric(10, 2), nullable=False)
-    is_available = db.Column(db.Boolean, default=True)
 
-    image_url = db.Column(db.String(255), nullable=True)  # later for images
+    image_url = db.Column(db.String(255))  # Photo (هنستخدم URL في v1)
+    stock = db.Column(db.Integer, nullable=False, default=0)
 
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
 
-    store = db.relationship("Store", backref=db.backref("products", lazy="dynamic"))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
 
-    def __repr__(self):
-        return f"<Product {self.name} (store={self.store_id})>"
-
+    store = db.relationship(
+        "Store",
+        backref=db.backref("products", lazy=True, cascade="all, delete-orphan"),
+    )
 
 # -------- Order ---------
 class Order(db.Model):

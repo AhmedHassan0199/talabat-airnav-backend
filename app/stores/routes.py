@@ -261,3 +261,82 @@ def delete_product(product_id):
 
     return jsonify({"message": "تم حذف المنتج"}), 200
 
+@stores_bp.route("", methods=["GET"])
+def list_active_stores():
+    """
+    Public endpoint لعرض كل المتاجر المتاحة للعملاء.
+    يدعم Query params بسيطة:
+    - category: لتصفية حسب نوع المتجر
+    - search: للبحث في الاسم / الوصف
+    """
+    category = request.args.get("category")
+    search = request.args.get("search")
+
+    query = Store.query.filter_by(is_active=True)
+
+    if category:
+        query = query.filter(Store.category == category)
+
+    if search:
+        like = f"%{search.strip()}%"
+        query = query.filter(
+            db.or_(Store.name.ilike(like), Store.description.ilike(like))
+        )
+
+    stores = query.order_by(Store.created_at.desc()).all()
+
+    def serialize(store: Store):
+        return {
+            "id": store.id,
+            "name": store.name,
+            "description": store.description,
+            "category": store.category,
+            "min_order_amount": float(store.min_order_amount or 0),
+            "delivery_fee": float(store.delivery_fee or 0),
+            "is_active": store.is_active,
+            # ممكن نزوّد بعدين rating / delivery_time / logo_url ...
+        }
+
+    return jsonify([serialize(s) for s in stores]), 200
+
+@stores_bp.route("/<int:store_id>", methods=["GET"])
+def get_store_with_products(store_id):
+    """
+    Public endpoint لعرض بيانات متجر واحد + المنتجات المتاحة للطلب.
+    """
+    store = Store.query.filter_by(id=store_id, is_active=True).first()
+    if not store:
+        return jsonify({"message": "المتجر غير موجود أو غير متاح حالياً"}), 404
+
+    products = (
+        Product.query
+        .filter_by(store_id=store.id, is_active=True)
+        .order_by(Product.created_at.asc())
+        .all()
+    )
+
+    return jsonify(
+        {
+            "store": {
+                "id": store.id,
+                "name": store.name,
+                "description": store.description,
+                "category": store.category,
+                "min_order_amount": float(store.min_order_amount or 0),
+                "delivery_fee": float(store.delivery_fee or 0),
+            },
+            "products": [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "description": p.description,
+                    "price": float(p.price),
+                    "image_url": p.image_url,
+                    "stock": p.stock,
+                    "is_active": p.is_active,
+                }
+                for p in products
+            ],
+        }
+    ), 200
+

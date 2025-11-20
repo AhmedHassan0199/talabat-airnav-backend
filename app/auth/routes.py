@@ -8,6 +8,10 @@ from app.models import User
 
 auth_bp = Blueprint("auth", __name__)
 
+VALID_ROLES = {"CUSTOMER", "SELLER"}
+DEFAULT_ROLE = "CUSTOMER"
+
+
 def generate_token(user: User):
     payload = {
         "sub": user.id,
@@ -57,29 +61,38 @@ def get_current_user_from_request(allowed_roles=None):
 @auth_bp.route("/register", methods=["POST"])
 def register():
     data = request.get_json() or {}
+
     username = data.get("username", "").strip()
     full_name = data.get("full_name", "").strip()
     email = data.get("email", "").strip().lower()
     password = data.get("password", "").strip()
+
     phone = data.get("phone")
     building = data.get("building")
     floor = data.get("floor")
     apartment = data.get("apartment")
 
+    # NEW: role coming from frontend (desired_role)
+    desired_role = (data.get("desired_role") or "").strip().upper()
+
     if not username or not full_name or not email or not password:
         return jsonify({"message": "برجاء إدخال كل البيانات المطلوبة"}), 400
 
+    # unique checks
     if User.query.filter_by(username=username).first():
         return jsonify({"message": "اسم المستخدم مستخدم بالفعل"}), 400
 
     if User.query.filter_by(email=email).first():
         return jsonify({"message": "هذا البريد مستخدم بالفعل"}), 400
 
+    # ✅ determine final role
+    role = desired_role if desired_role in VALID_ROLES else DEFAULT_ROLE
+
     user = User(
         username=username,
         full_name=full_name,
         email=email,
-        role="CUSTOMER",  # default
+        role=role,        # 👈 مهم
         phone=phone,
         building=building,
         floor=floor,
@@ -102,6 +115,10 @@ def register():
                 "full_name": user.full_name,
                 "email": user.email,
                 "role": user.role,
+                "building": user.building,
+                "floor": user.floor,
+                "apartment": user.apartment,
+                "phone": user.phone,
             },
         }
     ), 201

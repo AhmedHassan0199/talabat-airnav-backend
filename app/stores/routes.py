@@ -7,11 +7,11 @@ from datetime import datetime
 
 stores_bp = Blueprint("stores", __name__)
 
-@stores_bp.route("/my", methods=["GET"])
-def get_my_store():
+@stores_bp.route("/my", methods=["GET", "PUT"])
+def my_store():
     """
-    يرجّع المتجر الخاص بصاحب الحساب (SELLER).
-    لو مفيش متجر بيرجع 404 برسالة واضحة.
+    GET  -> رجّع بيانات متجر البائع الحالي
+    PUT  -> حدّث بيانات متجر البائع الحالي
     """
     current_user, error = get_current_user_from_request(allowed_roles=["SELLER"])
     if error:
@@ -19,8 +19,57 @@ def get_my_store():
         return jsonify({"message": msg}), status
 
     store = Store.query.filter_by(owner_id=current_user.id).first()
+
+    # -------- GET: رجوع بيانات المتجر --------
+    if request.method == "GET":
+        if not store:
+            return jsonify({"message": "لم يتم إنشاء متجر بعد لهذا المستخدم"}), 404
+
+        return jsonify(
+            {
+                "id": store.id,
+                "name": store.name,
+                "description": store.description,
+                "category": store.category,
+                "min_order_amount": float(store.min_order_amount or 0),
+                "delivery_fee": float(store.delivery_fee or 0),
+                "profile_image_url": store.profile_image_url,
+                "is_active": store.is_active,
+            }
+        ), 200
+
+    # -------- PUT: تحديث بيانات المتجر --------
+    data = request.get_json() or {}
+
+    # لو المتجر مش موجود، ممكن:
+    # - إما نرجع 404
+    # - أو ننشئ متجر جديد للبائع
+    # أنا هنا هختار إننا نرجع 404 عشان الأمور تبقى واضحة
     if not store:
-        return jsonify({"message": "لم يتم إنشاء متجر بعد"}), 404
+        return jsonify({"message": "لم يتم إنشاء متجر بعد لهذا المستخدم"}), 404
+
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"message": "اسم المتجر مطلوب"}), 400
+
+    store.name = name
+    store.description = (data.get("description") or "").strip() or None
+    store.category = data.get("category") or store.category
+
+    min_order_amount = data.get("min_order_amount")
+    delivery_fee = data.get("delivery_fee")
+
+    try:
+        store.min_order_amount = float(min_order_amount) if min_order_amount is not None else 0
+        store.delivery_fee = float(delivery_fee) if delivery_fee is not None else 0
+    except (TypeError, ValueError):
+        return jsonify({"message": "قيمة الحد الأدنى أو مصاريف التوصيل غير صالحة"}), 400
+
+    # صورة البروفايل (لو جت من الـ Frontend بعد الـ upload)
+    if "profile_image_url" in data:
+        store.profile_image_url = data.get("profile_image_url") or None
+
+    db.session.commit()
 
     return jsonify(
         {
@@ -30,10 +79,10 @@ def get_my_store():
             "category": store.category,
             "min_order_amount": float(store.min_order_amount or 0),
             "delivery_fee": float(store.delivery_fee or 0),
+            "profile_image_url": store.profile_image_url,
             "is_active": store.is_active,
         }
     ), 200
-
 
 @stores_bp.route("/my", methods=["POST"])
 def create_or_update_my_store():

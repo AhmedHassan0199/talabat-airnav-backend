@@ -1,30 +1,49 @@
+# app/__init__.py
 from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager
 from .config import Config
-from .database import db
-from .auth_routes import auth_bp
+
+db = SQLAlchemy()
+migrate = Migrate()
+
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    # Initialize extensions
-    db.init_app(app)
-    JWTManager(app)
-
-    # CORS – allow your NextJS origin
+    # CORS – نفس اللي عاملُه في الأبليكيشن الأول
     CORS(
         app,
-        resources={r"/api/*": {"origins": "*"}},  # in prod, restrict this to your domain
+        origins=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "https://airnav-compound-frontend.vercel.app",
+            "http://95.179.181.72:3000",
+            "http://airnav-compound.work.gd",
+            "http://market.airnav-compound.work.gd",
+        ],
         supports_credentials=True,
     )
 
+    db.init_app(app)
+    migrate.init_app(app, db)
+
+    # مهم علشان models تتسجل
+    from . import models  # noqa: F401
+
     # Blueprints
+    from .routes import main_bp
+    from .auth.routes import auth_bp
+
+    app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
 
-    # Create tables (for now, simple create_all; later use Alembic)
-    with app.app_context():
-        db.create_all()
+    # بعدين هنزود:
+    # from .seller_routes import seller_bp
+    # from .customer_routes import customer_bp
+    # app.register_blueprint(seller_bp, url_prefix="/api/seller")
+    # app.register_blueprint(customer_bp, url_prefix="/api/customer")
 
     return app

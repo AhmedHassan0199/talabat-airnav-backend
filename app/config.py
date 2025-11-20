@@ -10,6 +10,8 @@ class Config:
     JWT_SECRET = os.environ.get("JWT_SECRET", "dev-jwt-secret")
 
     _db_url = os.environ.get("DATABASE_URL", "")
+    MEDIA_ROOT = os.environ.get("MEDIA_ROOT", "/app/media")
+    MEDIA_URL_PATH = "/media"  # اللي هنستخدمه في الـ URLs الخارجية
 
     # convert postgres:// to postgresql:// لو موجودة
     if _db_url.startswith("postgres://"):

@@ -1,8 +1,9 @@
 from flask import Blueprint, jsonify, request
 from app import db
-from app.models import Store, Product
 from app.auth.routes import get_current_user_from_request
-
+from sqlalchemy import func
+from app.models import Store, Product, StoreReview
+from datetime import datetime
 
 stores_bp = Blueprint("stores", __name__)
 
@@ -261,14 +262,28 @@ def delete_product(product_id):
 
     return jsonify({"message": "تم حذف المنتج"}), 200
 
+def serialize_store_with_rating(store: Store):
+    avg, count = db.session.query(
+        func.coalesce(func.avg(StoreReview.rating), 0),
+        func.count(StoreReview.id)
+    ).filter(StoreReview.store_id == store.id).one()
+
+    avg_value = float(avg or 0)
+    return {
+        "id": store.id,
+        "name": store.name,
+        "description": store.description,
+        "category": store.category,
+        "min_order_amount": float(store.min_order_amount or 0),
+        "delivery_fee": float(store.delivery_fee or 0),
+        "is_active": store.is_active,
+        "profile_image_url": store.profile_image_url,
+        "avg_rating": round(avg_value, 1),
+        "reviews_count": int(count),
+    }
+
 @stores_bp.route("", methods=["GET"])
 def list_active_stores():
-    """
-    Public endpoint لعرض كل المتاجر المتاحة للعملاء.
-    يدعم Query params بسيطة:
-    - category: لتصفية حسب نوع المتجر
-    - search: للبحث في الاسم / الوصف
-    """
     category = request.args.get("category")
     search = request.args.get("search")
 
@@ -284,26 +299,10 @@ def list_active_stores():
         )
 
     stores = query.order_by(Store.created_at.desc()).all()
-
-    def serialize(store: Store):
-        return {
-            "id": store.id,
-            "name": store.name,
-            "description": store.description,
-            "category": store.category,
-            "min_order_amount": float(store.min_order_amount or 0),
-            "delivery_fee": float(store.delivery_fee or 0),
-            "is_active": store.is_active,
-            # ممكن نزوّد بعدين rating / delivery_time / logo_url ...
-        }
-
-    return jsonify([serialize(s) for s in stores]), 200
+    return jsonify([serialize_store_with_rating(s) for s in stores]), 200
 
 @stores_bp.route("/<int:store_id>", methods=["GET"])
 def get_store_with_products(store_id):
-    """
-    Public endpoint لعرض بيانات متجر واحد + المنتجات المتاحة للطلب.
-    """
     store = Store.query.filter_by(id=store_id, is_active=True).first()
     if not store:
         return jsonify({"message": "المتجر غير موجود أو غير متاح حالياً"}), 404
@@ -315,6 +314,13 @@ def get_store_with_products(store_id):
         .all()
     )
 
+    avg, count = db.session.query(
+        func.coalesce(func.avg(StoreReview.rating), 0),
+        func.count(StoreReview.id)
+    ).filter(StoreReview.store_id == store.id).one()
+
+    avg_value = float(avg or 0)
+
     return jsonify(
         {
             "store": {
@@ -324,6 +330,9 @@ def get_store_with_products(store_id):
                 "category": store.category,
                 "min_order_amount": float(store.min_order_amount or 0),
                 "delivery_fee": float(store.delivery_fee or 0),
+                "profile_image_url": store.profile_image_url,
+                "avg_rating": round(avg_value, 1),
+                "reviews_count": int(count),
             },
             "products": [
                 {
@@ -339,4 +348,84 @@ def get_store_with_products(store_id):
             ],
         }
     ), 200
+
+@stores_bp.route("/<int:store_id>/reviews", methods=["GET"])
+def list_store_reviews(store_id):
+    store = Store.query.filter_by(id=store_id, is_active=True).first()
+    if not store:
+        return jsonify({"message": "المتجر غير موجود"}), 404
+
+    reviews = (
+        StoreReview.query
+        .filter_by(store_id=store.id)
+        .order_by(StoreReview.created_at.desc())
+        .limit(50)
+        .all()
+    )
+
+    return jsonify(
+        [
+            {
+                "id": r.id,
+                "rating": r.rating,
+                "comment": r.comment,
+                "created_at": r.created_at.isoformat(),
+                "customer_name": r.customer.full_name,
+            }
+            for r in reviews
+        ]
+    ), 200
+
+@stores_bp.route("/<int:store_id>/reviews", methods=["POST"])
+def add_store_review(store_id):
+    current_user, error = get_current_user_from_request(allowed_roles=["CUSTOMER"])
+    if error:
+        msg, status = error
+        return jsonify({"message": msg}), status
+
+    store = Store.query.filter_by(id=store_id, is_active=True).first()
+    if not store:
+        return jsonify({"message": "المتجر غير موجود"}), 404
+
+    data = request.get_json() or {}
+    rating = data.get("rating")
+    comment = (data.get("comment") or "").strip()
+
+    try:
+      rating = int(rating)
+    except (TypeError, ValueError):
+      return jsonify({"message": "قيمة التقييم غير صالحة"}), 400
+
+    if rating < 1 or rating > 5:
+      return jsonify({"message": "التقييم يجب أن يكون بين 1 و 5"}), 400
+
+    # اختيارياً: السماح بتقييم واحد لكل عميل لكل متجر
+    existing = StoreReview.query.filter_by(
+        store_id=store.id, customer_id=current_user.id
+    ).first()
+    if existing:
+        existing.rating = rating
+        existing.comment = comment or existing.comment
+        existing.created_at = datetime.utcnow()
+        db.session.commit()
+        review = existing
+    else:
+        review = StoreReview(
+            store_id=store.id,
+            customer_id=current_user.id,
+            rating=rating,
+            comment=comment or None,
+        )
+        db.session.add(review)
+        db.session.commit()
+
+    return jsonify(
+        {
+            "id": review.id,
+            "rating": review.rating,
+            "comment": review.comment,
+            "created_at": review.created_at.isoformat(),
+            "customer_name": review.customer.full_name,
+        }
+    ), 201
 

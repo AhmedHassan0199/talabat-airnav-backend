@@ -50,3 +50,38 @@ def upload_product_image():
     public_url = f"{media_url_path}/products/{unique_name}"
 
     return jsonify({"url": public_url}), 201
+
+@uploads_bp.route("/store-image", methods=["POST"])
+def upload_store_image():
+    from app.auth.routes import get_current_user_from_request
+
+    current_user, error = get_current_user_from_request(allowed_roles=["SELLER"])
+    if error:
+        msg, status = error
+        return jsonify({"message": msg}), status
+
+    if "file" not in request.files:
+        return jsonify({"message": "لم يتم إرسال أي ملف"}), 400
+
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"message": "اسم الملف فارغ"}), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({"message": "نوع الملف غير مدعوم"}), 400
+
+    filename = secure_filename(file.filename)
+    ext = filename.rsplit(".", 1)[1].lower()
+    unique_name = f"{uuid.uuid4().hex}.{ext}"
+
+    media_root = current_app.config["MEDIA_ROOT"]
+    store_dir = os.path.join(media_root, "stores")
+    os.makedirs(store_dir, exist_ok=True)
+
+    save_path = os.path.join(store_dir, unique_name)
+    file.save(save_path)
+
+    media_url_path = current_app.config.get("MEDIA_URL_PATH", "/media")
+    public_url = f"{media_url_path}/stores/{unique_name}"
+
+    return jsonify({"url": public_url}), 201

@@ -39,11 +39,16 @@ def create_app():
     from .auth.routes import auth_bp
     from .stores.routes import stores_bp
     from .uploads.routes import uploads_bp
+    from app.orders.routes import orders_bp
+    from app.reviews.routes import profile_bp
+
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(stores_bp, url_prefix="/api/stores")
     app.register_blueprint(uploads_bp, url_prefix="/api/uploads")
+    app.register_blueprint(orders_bp, url_prefix="/api/orders")
+    app.register_blueprint(profile_bp, url_prefix="/api/profile")
 
     # بعدين هنزود:
     # from .seller_routes import seller_bp

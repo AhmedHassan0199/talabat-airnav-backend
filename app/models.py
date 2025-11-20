@@ -49,6 +49,8 @@ class Store(db.Model):
     open_from = db.Column(db.Time, nullable=True)  # optional
     open_to = db.Column(db.Time, nullable=True)    # optional
 
+    profile_image_url = db.Column(db.String(255), nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     owner = db.relationship("User", backref=db.backref("stores", lazy="dynamic"))
@@ -127,3 +129,25 @@ class OrderItem(db.Model):
 
     def __repr__(self):
         return f"<OrderItem order={self.order_id} product={self.product_id} qty={self.quantity}>"
+
+class StoreReview(db.Model):
+    __tablename__ = "store_reviews"
+
+    id = db.Column(db.Integer, primary_key=True)
+    store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=False)
+    customer_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+
+    rating = db.Column(db.Integer, nullable=False)  # 1 to 5
+    comment = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    store = db.relationship(
+        "Store", backref=db.backref("reviews", lazy="dynamic", cascade="all, delete-orphan")
+    )
+    customer = db.relationship(
+        "User", backref=db.backref("store_reviews", lazy="dynamic")
+    )
+
+    def __repr__(self):
+        return f"<StoreReview store={self.store_id} customer={self.customer_id} rating={self.rating}>"

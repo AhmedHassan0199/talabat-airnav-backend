@@ -1,7 +1,7 @@
-# app/auth/routes.py
-from flask import Blueprint, request, jsonify, current_app
 from datetime import datetime, timedelta
+
 import jwt
+from flask import Blueprint, request, jsonify, current_app
 
 from app import db
 from app.models import User
@@ -12,14 +12,25 @@ VALID_ROLES = {"CUSTOMER", "SELLER"}
 DEFAULT_ROLE = "CUSTOMER"
 
 
-def generate_token(user: User):
+def generate_token(user: User) -> str:
+    """
+    Generate a signed JWT for the given user.
+    """
+    secret = current_app.config.get("JWT_SECRET")
+    if not secret:
+        # fallback على SECRET_KEY لو JWT_SECRET مش مطلوب
+        secret = current_app.config.get("SECRET_KEY", "dev-jwt-secret")
+
     payload = {
-        "sub": user.id,
+        "sub": str(user.id),          # نخليها string عشان نبقى متوافقين مع PyJWT 2
         "role": user.role,
-        "exp": datetime.utcnow() + timedelta(days=30),
         "iat": datetime.utcnow(),
+        "exp": datetime.utcnow() + timedelta(days=30),
     }
-    token = jwt.encode(payload, current_app.config["JWT_SECRET"], algorithm="HS256")
+
+    token = jwt.encode(payload, secret, algorithm="HS256")
+
+    # PyJWT 1.x بيرجع bytes – 2.x بيرجع str
     if isinstance(token, bytes):
         token = token.decode("utf-8")
     return token
@@ -27,19 +38,25 @@ def generate_token(user: User):
 
 def get_current_user_from_request(allowed_roles=None):
     """
-    نفس الفكرة الموجودة عندك:
     - تقرأ Authorization: Bearer <token>
-    - تفك الـ JWT
-    - ترجّع (user, None) لو تمام
-    - أو (None, (message, status_code)) لو في مشكلة
+    - تفك JWT بنفس JWT_SECRET
+    - تجيب الـ User من الـ DB
+    - لو allowed_roles متحديد، تتأكد إن role فيهم
     """
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         return None, ("Missing or invalid Authorization header", 401)
 
     token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        return None, ("Missing or invalid Authorization header", 401)
+
+    secret = current_app.config.get("JWT_SECRET")
+    if not secret:
+        secret = current_app.config.get("SECRET_KEY", "dev-jwt-secret")
+
     try:
-        data = jwt.decode(token, current_app.config["JWT_SECRET"], algorithms=["HS256"])
+        data = jwt.decode(token, secret, algorithms=["HS256"])
     except jwt.ExpiredSignatureError:
         return None, ("Token expired, please login again", 401)
     except jwt.InvalidTokenError:
@@ -48,7 +65,16 @@ def get_current_user_from_request(allowed_roles=None):
     user_id = data.get("sub")
     role = data.get("role")
 
-    user = User.query.get(user_id)
+    if not user_id:
+        return None, ("Invalid token payload", 401)
+
+    # user_id string → int
+    try:
+        user_id_int = int(user_id)
+    except ValueError:
+        return None, ("Invalid token payload", 401)
+
+    user = User.query.get(user_id_int)
     if not user:
         return None, ("User not found", 404)
 

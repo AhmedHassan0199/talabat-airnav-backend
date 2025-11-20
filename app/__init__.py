@@ -41,6 +41,7 @@ def create_app():
     from .uploads.routes import uploads_bp
     from app.orders.routes import orders_bp
     from app.reviews.routes import profile_bp
+    from app.orders.routes import orders_bp
 
 
     app.register_blueprint(main_bp)
@@ -49,6 +50,7 @@ def create_app():
     app.register_blueprint(uploads_bp, url_prefix="/api/uploads")
     app.register_blueprint(orders_bp, url_prefix="/api/orders")
     app.register_blueprint(profile_bp, url_prefix="/api/profile")
+    app.register_blueprint(orders_bp, url_prefix="/api/orders")
 
     # بعدين هنزود:
     # from .seller_routes import seller_bp
